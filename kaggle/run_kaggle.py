@@ -18,6 +18,11 @@ Usage on Kaggle (P100, internet on):
 """
 from __future__ import annotations
 
+import os
+# Pin deterministic cuBLAS workspace BEFORE torch/CUDA initialises (matches train.py), so the
+# P100 determinism self-check is valid. Must run before any `import torch`.
+os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+
 import argparse
 import json
 import re
