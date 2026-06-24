@@ -1,0 +1,14 @@
+# Core (no network/LLM dependencies in v1 — deterministic by design).
+click>=8.1
+pyyaml>=6.0
+rich>=13.0
+numpy>=1.26
+
+# PyTorch: install the CUDA build matching the local GPU (RTX 3050 Laptop, 8GB).
+# On Windows with CUDA 12.x:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+# A CPU-only build also works for the --quick smoke test (slower).
+torch>=2.1
+
+# Dev
+pytest>=8.0

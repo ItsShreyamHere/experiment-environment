@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "constant-discovery-engine"
+version = "0.1.0"
+description = "CDE — a scientific instrument that measures the constants of state compression and attacks the laws that depend on them."
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.1",
+    "pyyaml>=6.0",
+    "rich>=13.0",
+    "numpy>=1.26",
+    # torch is installed separately (CUDA build for the local GPU); see requirements.txt.
+    "torch>=2.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+cde = "src.cli:cli"
+
+[tool.setuptools]
+packages = ["src"]
+
+[tool.setuptools.package-dir]
+src = "src"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

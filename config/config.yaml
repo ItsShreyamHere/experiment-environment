@@ -1,0 +1,147 @@
+# Constant Discovery Engine — configuration.
+# v1 is deterministic and offline: no LLM/API section exists by design.
+
+# Upstream sibling sources (read-only, relative to project root).
+sources:
+  corpus_db:   ../corpus-builder/research_corpus/data/db/corpus.db
+  chroma_dir:  ../corpus-builder/research_corpus/data/embeddings/chroma
+  pressure_db: ../scientific-knowledge-extractor/data/db/pressure.db
+  research_db: ../research-director/data/db/research.db
+  rse_db:      ../research-synthesis-engine/data/db/rse.db
+  rse_laws:    ../research-synthesis-engine/research_focus/ssm_state_compression/16_laws_of_state_compression.md
+
+# CDE's own append-only store.
+database:
+  path: data/db/cde.db
+
+paths:
+  exports: data/exports
+  runs:    data/runs
+  logs:    logs
+
+# Only accepted sibling rows feed the evidence graph by default.
+upstream:
+  accepted_only: true
+
+# Instrument Calibration Program 0 (ICP0) — calibrate the recall instrument, then
+# (only if the Measurement Axioms hold) read the slope of K*(N) as b.
+# Tiny models only (8GB RTX 3050 Laptop). Plain-PyTorch recurrence; no CUDA kernels.
+icp0:
+  arches: [diag_ssm, attention]   # one pure fixed-state recurrence + one attention control
+  # CALIBRATION grid: K extended past 32 so each N reaches a true plateau (not censored),
+  # multiple seeds (axiom A3), longer training (kill the K>=16 undertraining of pilot 3).
+  # State is S in R^{N x d_model}, so capacity ~ N*d_model. Keep d_model small and N
+  # modest so cells converge fast and N meaningfully controls the slope. Large N (>=64)
+  # cells do not converge cheaply on this GPU (they crashed even at 14000 steps / 30-68min).
+  # Tiny N where 30k steps reaches the capacity plateau (N=8 -> K*~13 converged; N=16
+  # does NOT converge at 30k). Trade N-range for cells that actually calibrate.
+  state_dims: [6, 7, 8]            # N axis; N>=10 does not converge at 30k steps (drops)
+  k_multipliers: [0.5, 1.0, 2.0]   # 0.5N/N below K*~1.6N (rise), 2N past it (plateau)
+  k_max: 32
+  num_pairs: [8, 16, 32, 48]       # fallback if k_multipliers is removed
+  vocab_size: 16                   # easier values (log V = 4) -> fast, clean convergence
+  num_queries: 32                  # enough scored positions for a strong gradient signal
+  d_model: 64
+  n_layers: 2
+  n_heads: 4                       # attention control only
+  seq_len: 1024                    # safety cap on sequence length (2K + 2*num_queries must fit)
+  batch_size: 32
+  steps: 30000                     # overloaded cells need ~30k steps to reach the plateau
+  lr: 0.0005                       # SSM lr; recall degrades below this
+  attention_lr: 0.0004             # lower -> reliable convergence at the longer (high-K) cells
+  warmup_steps: 600                # linear LR warmup (stabilises early training)
+  grad_clip: 1.0                   # gradient-norm clipping
+  log_every: 100                   # cadence for grad-norm / loss / eval-acc logging
+  seeds: [0, 1, 2]                 # single-seed CALIBRATED (axioms pass); 3 seeds -> A3 + CI
+  amp: false                       # pure fp32: eliminates the nonfinite-gradient spikes
+  early_stop_acc: 0.99             # stop a cell once val recall reaches this
+  device: auto                     # auto -> cuda if available else cpu
+  workers: 3                       # cells trained concurrently (parent writes the DB).
+                                   # 3 is the safe max on the 8GB RTX 3050 (~1.43x); 4+ OOMs.
+
+  # --quick override: a tiny grid for fast end-to-end validation (CPU-friendly).
+  # The full grid (incl. N=256, K up to 256) is the GPU job; the plain-PyTorch
+  # outer-product scan is slow on CPU at large N, so --quick stays small.
+  quick:
+    state_dims: [16, 32, 64, 128]   # wider N range -> clearer K*(N) slope
+    num_pairs: [16, 32]             # K near/above capacity so K* is observable
+    vocab_size: 16                  # easier values (log V = 4) -> the SSM converges quickly
+    steps: 3000                     # enough for the SSM to reach capacity at moderate K
+    lr: 0.0005
+    seeds: [0]                      # batch_size stays at the default 32
+
+# Deterministic curvature classifier for K*(N) + Measurement Axiom thresholds.
+# A verdict is read ONLY if every axiom holds; otherwise the run is inconclusive.
+estimator:
+  # If the fitted exponent p in K* ~ N^p exceeds this, K*(N) is "super-linear" -> L1 collapses.
+  superlinear_threshold: 1.15
+  # If p is below this, sub-linear (worst case for the trajectory; also damages L1).
+  sublinear_threshold: 0.85
+  bootstrap_samples: 1000
+  # Measurement Axioms (lab/axioms.py):
+  monotonic_drop_tol: 0.7          # A1/A2: K_correct(K) must stay >= 0.7 * running max (no drops)
+  seed_cv_max: 0.25                # A3: across-seed K* coefficient of variation ceiling
+  attention_min: 0.85              # A4: attention control mean recall floor
+  nonfinite_frac_max: 0.02         # A5: max fraction of nonfinite-gradient steps per cell
+
+# MP0b — Bimodal Convergence Investigation (study, not fix). Run one overloaded cell
+# across many seeds with identical hyperparameters and characterise the two-basin outcome.
+mp0b:
+  arch: diag_ssm
+  N: 16                            # MP0b-15: the VALIDATED scale (MP0b-12/13/14), not the small-N N=8
+  K: 32                            # 2x overload at N=16 (matches the scale/MP0b-13/14 cell)
+  n_seeds: 16                      # enough to see the distribution + stuck fraction
+  vocab_size: 16
+  num_queries: 32
+  d_model: 64
+  n_layers: 2
+  scan_chunk: 64                   # whole-sequence chunk (T=64): no scan Python loop -> ~2.7x faster,
+                                   # numerically equivalent to chunk=8 (max diff ~5e-6). Fast-harness.
+  batch_size: 32
+  steps: 150000                    # MP0b-15: full N=16 ramp budget (matches MP0b-13/14 scale run)
+  lr: 0.0005
+  amp: false
+  grad_clip: 1.0
+  warmup_steps: 600
+  log_every: 50                    # MP0b-14 morphology: dense (~3000 pts/150k) to resolve the SHAPE
+  early_stop_acc: 1.01             # never early-stop: we want the full trajectory
+  device: auto
+  workers: 3
+  stuck_threshold: 0.7             # final_k < 0.7*max -> classified "stuck"
+  # MP0b-8 (CAUSAL ablation): swap one parameter block between a robust winner (init0) and
+  # loser (init1); which block transfers the outcome? Localise the winning-ticket coordinate.
+  # MP0b-9 (PERTURB CONTROL): MP0b-8 found almost any W-block rescues L (redundant/distributed).
+  # Attack the "winning ticket transfers" story: does a RANDOM block (fresh seed, neither W nor
+  # L) rescue L just as well? random ~= W => rescue is mere perturbation / barrier-kicking.
+  # MP0b-14 (THE LAST EXPERIMENT): attack the word "jump". Same N=16/150k, but DENSE trajectory
+  # logging (log_every=50). Morphology: true discontinuous jump (A) / continuous ramp (B) /
+  # staircase (C) / other (D)? After this run: STOP, consolidate, write.
+  # MP0b-15 (THE NEXT ATTACK): decouple init_seed x data_seed at the VALIDATED N=16/150k scale.
+  # The "initialization-determined" survivor rests entirely on MP0b-5 (grid2d at N=8/40k, now
+  # archived in data/runs/mp0b/grid2d_N8_K16/), where it was only HALF true (i2/i3 were data-
+  # tippable). At N=16 the scale run left init==data coupled, so its 5 ramped seeds are confounded.
+  # This grid intervenes: rows = init basin, cols = data/SGD path. Variance decomposition
+  # (_analyze_grid2d) tells whether the outcome is init-, data-, or interaction-determined.
+  # Diagonal cells (i==d) byte-reproduce the scale run -> determinism cross-check
+  # (s0->7.69, s1->22.34, s2->19.05, s3->11.58).
+  # MP0b-16 (THE NEXT ATTACK): critical-window data-switch. MP0b-15 showed borderline init i3 is
+  # stuck under d0/d1/d3 but RESCUED by d2, with the basin selected MID-TRAINING (~20-50k). Switch
+  # i3's training stream between rescuing (d2) and non-rescuing (d0) at step T to locate the causal
+  # window: rm (d2->d0) crossover = rescue lock-in step; add (d0->d2) crossover = window-close step.
+  data_switch:
+    init_seed: 3
+    rescue_seed: 2
+    stuck_seed: 0
+    switch_steps: [10000, 20000, 30000, 50000, 75000]
+  # MP0b-15 (DONE): grid2d retired (data in data/runs/mp0b/grid2d/). dispatch checks data_switch
+  # first, but keep this commented for clarity. init x data 4x4 -> init 0.567/data 0.077/inter 0.356.
+  # grid2d:
+  #   init_seeds: [0, 1, 2, 3]
+  #   data_seeds: [0, 1, 2, 3]
+  # MP0b-14 (DONE): scale block retired -- dispatch checks `scale` before `grid2d`, so it must be
+  # absent for grid2d to run. Preserved here for provenance.
+  # scale:
+  #   points:
+  #     - {N: 16, d_model: 64, K: 32}
+  #   n_seeds: 12
+  #   steps: 150000

@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# CDE outputs (platform-specific; kept on the laptop as the canonical record).
+# Excluded so the GitHub clone is tiny and Kaggle (P100) starts from a clean,
+# re-baselined state rather than inheriting laptop floating-point results.
+data/
+logs/
+*.log
+mp0b16_p100_results.zip
+
+.DS_Store

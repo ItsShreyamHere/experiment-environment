@@ -1,0 +1,24 @@
+# Scientific Quantities — the heart of the instrument. Laws depend on these;
+# these depend only on Measurements. Seeded "unmeasured"; MP0 fills b, K*.
+
+quantities:
+  - name: b
+    symbol: b
+    units: bits/dim
+    measurement_method: "MP0: slope of K*(N) times log V  (b = slope * log V)"
+    description: "Effective bits per state coordinate — the one missing constant."
+    status: unmeasured
+
+  - name: K_star
+    symbol: K*
+    units: items
+    measurement_method: "MP0: max over m of (recall_accuracy * m), per state size N"
+    description: "Conserved number of losslessly retrievable items, independent of input length m."
+    status: unmeasured
+
+  - name: Q
+    symbol: Q
+    units: bits
+    measurement_method: "Derived: Q = N*b once b is measured"
+    description: "State capacity — the channel from past to future (Q = N*b = K* * log V)."
+    status: unmeasured

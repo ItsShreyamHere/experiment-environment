@@ -1,0 +1,41 @@
+# Theory Objects under test. v1 activates ONE law (L1); K6/K9 are dormant
+# placeholders so the structural dependency graph (L1 -> K6 -> K9) exists.
+# A theory carries NO confidence — only an attack ledger (filled at runtime).
+
+theories:
+  - id: L1
+    type: law
+    mode: active
+    priority: 1
+    statement: >
+      Recall Rate-Distortion Law: average associative-recall accuracy is capped by
+      state capacity divided by recall load.
+    formula: "a_bar(m) <= min(1, N*b / (m*log V));  K* = N*b/log V is conserved (independent of m)."
+    measures: [b, K_star, Q]          # quantities this law is stated in terms of
+    falsification: >
+      K*(N) grows strictly super-linearly in N (exponent p > superlinear_threshold),
+      i.e. the recalled-item count is NOT a conserved K* = N*b/log V. Then L1 collapses.
+    depends_on: []                     # L1 is the root
+
+  - id: K6
+    type: conjecture
+    mode: dormant
+    priority: 2
+    statement: >
+      Sparse-Recall Escape: the recall ceiling binds at access-sparsity s, not total m.
+    formula: "Q = Theta(s*log(m/s)*log V); degenerates to L1 when s = m."
+    measures: [b, s]
+    falsification: "Dense and sparse recall collapse identically (no dependence on s)."
+    depends_on: [L1]                   # K6 specializes L1; if L1 dies, K6 is undermined
+
+  - id: K9
+    type: conjecture
+    mode: dormant
+    priority: 3
+    statement: >
+      Attention and SSMs are the two endpoints of one predictive rate-distortion curve;
+      every hybrid is an interior point.
+    formula: "optimal attention fraction = fraction of predictive info that is dense-access (s ~ m)."
+    measures: [b, Q]
+    falsification: "Hybrid optimum does not track the dense-access fraction across domains."
+    depends_on: [K6]                   # K9 unifies via K6/L1; structurally downstream of both
