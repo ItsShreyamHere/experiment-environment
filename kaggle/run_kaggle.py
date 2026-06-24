@@ -32,6 +32,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))   # so `import src.*` works when run as `python kaggle/run_kaggle.py`
 
 
 def patch_mp0b_workers(cfg_path: Path, n: int) -> None:
@@ -118,7 +119,8 @@ def main() -> None:
         determinism_selfcheck()
 
     print("[kaggle] launching `cde study` (dispatches to the active mp0b block) ...")
-    subprocess.run([sys.executable, "-m", "src.cli", "study"], cwd=str(ROOT), check=True)
+    env = {**os.environ, "PYTHONPATH": str(ROOT)}
+    subprocess.run([sys.executable, "-m", "src.cli", "study"], cwd=str(ROOT), check=True, env=env)
 
     summarize()
     zip_outputs()
