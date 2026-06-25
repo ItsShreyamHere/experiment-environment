@@ -510,3 +510,76 @@ never ramps; >=1500 becomes a late-riser. **Verdict: warmup is a clean causal le
 a too-fast early-LR ramp traps i3xd0; a gentler ramp escapes it. Confirms the **early-high-LR
 optimization trap** (threshold-shaped escape). **Capstone (MP0b-21, RUNNING):** does a gentler warmup
 dissolve the WHOLE 12-seed bimodality (baseline warmup=600: 7/12 stuck) or only i3xd0?
+
+## MP0b-21 — CAPSTONE: warmup is NOT a master switch; the bimodality is robust
+
+Does a gentler warmup dissolve the WHOLE 12-seed bimodality, or only i3xd0 (MP0b-19/20)? Re-run the
+original 12-seed coupled cell at warmup=3000 vs the warmup=600 baseline (both 150k, determinism intact).
+```
+seed:    s0   s1   s2   s3   s4   s5   s6   s7   s8   s9  s10  s11   | stuck(<10)
+w=600:  7.7 22.3 19.0 11.6 11.2  7.7  7.6  7.3  7.8  7.8  8.0 10.7   |  7/12
+w=3000: 9.9 25.2 26.6 26.4  9.9  7.9  7.7 12.4  7.7  7.8  7.8 16.1   |  7/12
+                          TRAP            RESC
+```
+**Net effect of a 5x gentler warmup: ZERO change in stuck fraction (7/12 -> 7/12).** Per-seed: 1 rescued
+(s7 7.3->12.4), 1 trapped (s4 11.2->9.9), 10 basins unchanged. Warmup *amplified* the existing basins
+(winners win bigger: s3 11.6->26.4, s2 19->27) and added spread (cv 0.54), but did not move the
+population across the split.
+
+**Verdict - warmup is a per-cell nudge, not a universal lever.** The MP0b-19/20 rescue of i3xd0 was
+REAL but **cell-specific**; warmup does not generally escape the stuck basin. **This KILLS the over-claim**
+(my own, MP0b-19) that "the bimodality is just an LR-schedule artifact": it survives a 5x warmup change.
+Symmetrically, the *data* lever is also not universal - the rescuing stream d2 flips *borderline* inits
+(i2/i3) but not the robust loser i0 (i0xd2 = 9.4, still stuck; MP0b-15 grid2d). **Neither data nor
+schedule is a master switch.** The bimodality is robust.
+
+---
+
+# THE DISCOVERY (consolidated, MP0b-15..21) — the reopened investigation
+
+**What it is.** The bimodal "stuck vs rescued" convergence in tiny gated-linear-attention associative
+recall - the phenomenon that produced the A3 irreproducibility that launched CDE - is an **early-training
+basin-selection process**: the final recall-capacity basin is decided in a **sharp, latent critical
+period in the first ~1-2k training steps**, then held essentially irreversibly within feasible budgets.
+
+**The evidence chain (each step an intervention, all bit-deterministic):**
+1. **Init x data, not init alone (MP0b-15).** Decoupling init and data seeds at N=16: 57% of outcome
+   variance is init, but a **36% noise-free init x data interaction** flips borderline inits across
+   basins by data alone. "Initialization-determined" (the prior survivor) is only the leading term.
+2. **Early, latent, irreversible (MP0b-16).** Switching the data stream shows the basin is committed in
+   the first <10k steps and cannot be undone by 140k later steps of the opposite stream - *before* any
+   visible accuracy change (the ramp at ~20-30k is a lagging readout).
+3. **Pinned to ~1-2k, cross-validated (MP0b-17).** A fine two-sided sweep pins the commitment to a sharp
+   window at ~steps 1000-2000, latent (acc ~0.17 for both fates at the moment they diverge).
+4. **General across inits (MP0b-18).** A second borderline init (i2) shows the same critical period at a
+   different, init-specific location (~0.5-1k); commitment speed tracks basin reachability.
+5. **A co-determinant, not a single cause (MP0b-19/20/21).** The LR warmup schedule is *also* a lever -
+   it flips i3xd0 (12->27) with a clear threshold (MP0b-20) - but at the population level a 5x warmup
+   change leaves the stuck fraction unchanged (MP0b-21). Neither data nor schedule is a master switch.
+
+**Why it matters / connection to `b`.** The effective recall capacity K* (hence the constant `b = K* log
+V / N`) at an overloaded cell is **not an asymptotic property** - it is fixed stochastically in an early
+critical period, co-determined by init x data x schedule, with no single controlling coordinate (every
+one tried - decay bias, weight blocks, geometry, LR, weight decay, warmup - is at most a partial lever;
+MP0b-3..11, 19-21). **This is *why* CDE could not measure a reproducible `b` at this cell, and A3 was
+right to refuse `b=6.54`:** the irreproducibility is a genuine early-training critical-period
+stochasticity, not measurement error and not a removable artifact. The instrument's refusal was correct,
+and the thing it refused is now *characterized*: a real, robust, mechanistically-located phenomenon.
+
+**The graveyard (killed by intervention).** b=6.54 (A3) - weight decay - learning rate - decay-bias
+correlate - to_q localization - winning-block transfer - "fresh 50% lottery" - smooth/predictive
+geometry - magnitude/distance law - "toy-scale artifact" - the word "jump" (it's a continuous ramp) -
+strict "init-determined" (it's init x data) - "intrinsic data-driven critical period" (schedule co-
+determines) - **and "bimodality is just an LR-schedule artifact" (MP0b-21: survives 5x warmup).**
+
+**The survivor (a characterized mechanism, not a mystery).** An **early-training (~1-2k step), latent,
+near-irreversible, init-specific critical period that selects the recall-capacity basin, co-determined
+by initialization, data stream, and optimization schedule, with no single master coordinate.** It is
+the mechanism behind the original A3 irreproducibility. Explanations were cheap and all died; the
+phenomenon survived 21 experiments and is now located in training time, shown general across inits, and
+shown robust to (while modulable by) both data and schedule.
+
+**Open (compute-gated; needs cloud/4090 or N>=32).** Does the critical period appear in other
+recurrences/attention? Does it persist / its window scale at N>=32? Is there a schedule that *does*
+collapse the bimodality (cosine, lower peak LR, longer total budget)? These extend the discovery; they
+do not threaten its core, which is established on this 4 GB laptop.
