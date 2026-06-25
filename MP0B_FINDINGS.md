@@ -386,3 +386,127 @@ set at init" (MP0b-14) · "die cast at init, hidden early" (now: true only for d
 structure fast (~0.24 by 10k); the transition is a slow continuous ramp once a basin is selected
 (MP0b-14). **New object:** a large, reproducible, **noise-free init×data interaction** — borderline
 inits have their basin **selected mid-training by the data stream**, in a ~20–50k window.
+
+## MP0b-16 — critical-window data-switch: the basin is committed EARLY (<10k) and IRREVERSIBLY
+
+**The attack.** MP0b-15 left the timing ambiguous ("selected ~20-50k"). MP0b-16 intervenes: take the
+borderline init i3 (stuck under d0, rescued by d2) and **switch its training data stream** between the
+two worlds at step T (opt-in `data_switch` hook in `train.py`; eval set fixed). Two arms:
+- **rm** (start rescuing d2 -> switch to stuck d0 at T): the crossover marks the rescue **lock-in** step.
+- **add** (start stuck d0 -> switch to rescuing d2 at T): the crossover marks the **window-close** step.
+T in {10,20,30,50,75}k, 150k total. **Determinism gate PASSED** - the two no-switch controls reproduce
+the grid2d i3 cells *exactly* (ctrl_rescue 29.42 = i3xd2; ctrl_stuck 12.12 = i3xd0).
+
+**Result - both arms are flat; they agree:**
+```
+rm  (d2 -> d0 at T):   T=10k 29.7 | 20k 29.8 | 30k 29.3 | 50k 29.2 | 75k 29.2   ALL RESCUED (~ctrl 29.4)
+add (d0 -> d2 at T):   T=10k  9.6 | 20k 11.8 | 30k 11.9 | 50k 12.0 | 75k 11.8   ALL STUCK   (~ctrl 12.1)
+```
+- **rm:** removing the rescuing stream changes nothing - even at **T=10k, where acc@switch was still
+  0.28** (flat, indistinguishable from stuck). The first <10k steps of d2 **lock in** the rescue.
+- **add:** adding the rescuing stream never rescues - even add_T10k, which then trains on d2 for the
+  remaining **140k steps**, stays stuck (9.6). This **refutes the remaining-steps caveat**: it is genuine
+  **irreversibility**, not insufficient time. The first <10k steps of d0 lock in the stuck basin, and
+  140k steps of the rescuing data cannot escape it within budget.
+
+**Verdict - an early, data-driven, irreversible critical period.** Whichever data world is present in
+the **first <10k steps** determines the basin, and the commitment is **irreversible within the 150k
+budget**. The basin is set long *before* it is visible: i3xd2 commits by <10k but its accuracy does not
+begin rising until ~20-30k (MP0b-15). The visible ramp is a **lagging readout of a commitment already made**.
+
+**Casualties (MP0b-16):**
+- MP0b-15's "data selects the basin **mid-training (~20-50k)**" - **CORRECTED**: ~20-50k is only when the
+  already-made choice becomes *visible*; the actual selection is **<10k and latent**.
+- the "fewer-remaining-steps" caveat on the add arm - **refuted** (140k of d2 still fails).
+- weakens any "metastable late hop" residue further: there is no late hop and no late decision.
+
+**Survivors / sharpened object:** a **critical-period** mechanism - for a borderline init, the basin
+(hence effective K* and effective `b`) is **committed in the first <10k training steps by the data
+stream, then frozen**. (Caveat: "irreversible" = not reversed within 150k; at N=8 stuck seeds eventually
+moved, so the escape time, if finite, exceeds this budget.) **For L1/`b`:** the basin is a critical-period
+quantity fixed by the first <10k steps of the init x data trajectory - not an asymptotic constant.
+
+## MP0b-17 — finer early sweep: the critical period is PINNED to ~steps 1000-2000
+
+MP0b-16 was flat for T>=10k, so the lock-in is earlier; this sweeps T in {0.5,1,2,4,8}k in both arms
+(init i3, d2<->d0, 150k; determinism gate PASS - controls reproduce grid2d i3 exactly).
+```
+rm  (d2 -> d0 at T):   0.5k 12.9 stuck | 1k  9.5 stuck | 2k 29.2 RESC | 4k 27.5 RESC | 8k 29.2 RESC
+add (d0 -> d2 at T):   0.5k 28.5 RESC  | 1k 26.4 RESC  | 2k 12.0 stuck| 4k  9.0 stuck| 8k  8.9 stuck
+```
+**Both arms cross-validate the same sharp boundary between step 1k and 2k:**
+- **rm:** <=1k of d2 is insufficient (reverts to stuck); >=2k of d2 locks in the rescue.
+- **add:** switching to d2 by <=1k still rescues; >=2k of d0 first locks in stuck.
+- Approached from below the rescue weakens monotonically toward the boundary (add 0.5k->28.5,
+  1k->26.4, 2k->stuck): a sharp but continuous transition zone, not a single-step cliff.
+
+**The commitment is invisible when it happens.** At step 2k, acc@switch is **0.17-0.18 for BOTH** the
+cell that will rescue (->0.91) and the one that stays stuck (->0.37); indistinguishable at the moment
+their fates diverge, and so until the visible ramp at ~20-30k.
+
+**Verdict - a hidden critical period.** For borderline init i3 the final capacity basin is selected by
+the data stream within a sharp window at **~steps 1000-2000**, latent ~20k steps before it shows, and
+irreversible thereafter (MP0b-16). A *pinned, two-sided cross-validated* mechanism. **Next attacks:**
+(1) the window sits just after LR warmup ends (600 steps) - vary warmup; (2) replicate on another
+borderline init (i2xd3) to test i3-specificity.
+
+## MP0b-18 — generality: the critical period is GENERAL, its timing is INIT-SPECIFIC
+
+Replicate the fine sweep on a DIFFERENT borderline init: i2 (a winner under d0=29.4, broken by d3=11.5).
+init=2, rescue=d0, stuck=d3, T in {0.5,1,2,4,8}k, 150k. Determinism gate PASS (controls reproduce
+grid2d i2 exactly: 29.36 / 11.53).
+```
+i2 rm  (d0 -> d3 at T):  0.5k 29.2 RESC | 1k 24.1 RESC | 2k 28.4 RESC | 4k 29.4 RESC | 8k 28.9 RESC
+i2 add (d3 -> d0 at T):  0.5k 23.4 RESC | 1k 11.6 stuck| 2k 11.8 stuck| 4k  9.3 stuck| 8k 11.5 stuck
+```
+- **Same phenomenon as i3:** a sharp, two-sided, **latent** (at the boundary acc@switch ~0.12 for BOTH
+  the future-rescued and future-stuck cell), irreversible early critical period.
+- **Different timing:** i2's boundary is **~0.5-1k** (rm locks in <0.5k; add closes between 0.5k and 1k),
+  vs i3's **~1-2k**. i2 (robust winner) commits ~2x faster than i3 (default-loser). Commitment speed
+  tracks how "reachable" the basin is for that init.
+
+**Verdict - generality CONFIRMED (2/2 borderline inits).** The early, latent, irreversible, data-driven
+critical period is **not i3-specific**; it is a general mechanism whose **window location is init-dependent**.
+**Casualty:** the "i3-specific fluke" worry - killed. **Bonus:** i2 and i3 commit at *different* steps
+under *identical* warmup (600), so the window is **not set by the LR schedule alone**.
+
+## MP0b-19 — WARMUP attack: the clean story CRACKS. The basin is schedule-dependent (an early-LR trap)
+
+Rerun i3's fine sweep at **warmup_steps=3000** (5x the usual 600). (Determinism-vs-grid2d mismatch is
+EXPECTED - warmup changes training; the controls instead define the warmup=3000 basins.)
+```
+                       ctrl i3xd0 (stuck stream)   ctrl i3xd2 (rescue stream)
+warmup=600  (MP0b-17):        12.1  STUCK                 29.4  rescued
+warmup=3000 (MP0b-19):        27.0  HIGH (!)              28.1  high
+```
+**The longer warmup RESCUED the default-stuck cell** (i3xd0: 12.1 -> 27.0). At warmup=3000 i3 reaches
+the high basin **regardless of data stream** - the clean data-dependence that defined the critical
+period **vanishes**, and the data-switch cells scatter non-monotonically (no clean window).
+
+**Verdict - the critical period is SCHEDULE-DEPENDENT, not intrinsic.** The LR warmup length is a
+**causal lever on the basin**: a gentler early-LR ramp flips "stuck" -> "rescued."
+
+**Reframe (richer + more honest).** Combining MP0b-15..19: the **"stuck basin" is an early-training
+OPTIMIZATION TRAP**, entered or avoided in the first ~1-2k steps, escapable by **either** (a) the
+rescuing data stream during the critical window (MP0b-16/17/18) **or** (b) a gentler LR warmup
+(MP0b-19). It is **not** a capacity/data limit. So the bimodal stuck/rescued outcome - and the original
+**A3 irreproducibility** - is largely an **optimization artifact**, not a property of the data or state
+size. **Casualty:** "intrinsic data-driven critical period" (downgraded: schedule-modulable). **`b`:**
+the irreproducibility was the optimizer stochastically falling into an early trap; gentler schedules
+may recover convergence.
+
+## MP0b-20 — warmup sweep on i3xd0: a THRESHOLD escape (confirms the early-LR trap)
+
+Sweep warmup on the fixed flipped cell i3xd0. Built-in determinism checks PASS (warmup=600 -> 12.12 =
+grid2d i3xd0; warmup=3000 -> 26.97 = MP0b-19 ctrl) - bit-consistent across the whole investigation.
+```
+warmup:     300    600   1500   3000   6000
+i3xd0 fk:  13.8   12.1   22.5   27.0   23.0      stuck,stuck,RESC,RESC,RESC
+acc@150k:  0.43   0.38   0.70   0.84   0.72
+```
+**Threshold-shaped, not strictly monotone:** trapped at warmup<=600, escapes sharply by 1500, optimum
+~3000, slight decline at 6000 (too-long warmup wastes early low-LR steps). Trajectories: warmup<=600
+never ramps; >=1500 becomes a late-riser. **Verdict: warmup is a clean causal lever on the basin** -
+a too-fast early-LR ramp traps i3xd0; a gentler ramp escapes it. Confirms the **early-high-LR
+optimization trap** (threshold-shaped escape). **Capstone (MP0b-21, RUNNING):** does a gentler warmup
+dissolve the WHOLE 12-seed bimodality (baseline warmup=600: 7/12 stuck) or only i3xd0?
