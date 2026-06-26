@@ -123,8 +123,11 @@ def main() -> None:
     args = ap.parse_args()
 
     import torch
-    print(f"[kaggle] torch {torch.__version__}  CUDA={torch.cuda.is_available()}  "
-          f"device={torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
+    ngpu = torch.cuda.device_count() if torch.cuda.is_available() else 0
+    print(f"[kaggle] torch {torch.__version__}  CUDA={torch.cuda.is_available()}  GPUs={ngpu}  "
+          f"device0={torch.cuda.get_device_name(0) if ngpu else 'CPU'}")
+    if ngpu > 1:
+        print(f"[kaggle] multi-GPU: scale cells round-robin across all {ngpu} GPUs (use --workers ~{2*ngpu})")
 
     patch_mp0b_workers(ROOT / "config" / "config.yaml", args.workers)
     if not args.skip_selfcheck:

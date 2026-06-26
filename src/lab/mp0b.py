@@ -440,8 +440,12 @@ def run_scale(db: Database, cfg, run_id: str, mp: dict[str, Any]) -> dict[str, A
     n_seeds = int(sc.get("n_seeds", 12))
     steps = int(sc.get("steps", 30000))
     arch, workers = mp.get("arch", "diag_ssm"), int(mp.get("workers", 3))
+    try:                                          # spread cells across all visible GPUs (Kaggle T4 x2)
+        import torch; ngpus = torch.cuda.device_count()
+    except Exception:
+        ngpus = 1
     runs_dir = cfg.data_path("runs") / "mp0b" / "scale"; runs_dir.mkdir(parents=True, exist_ok=True)
-    log.info(f"[MP0b] SCALE ATTACK: {len(points)} capacity points x {n_seeds} seeds, steps={steps}.")
+    log.info(f"[MP0b] SCALE ATTACK: {len(points)} capacity points x {n_seeds} seeds, steps={steps}; gpus={ngpus}.")
     cells = [(i, s) for i in range(len(points)) for s in range(n_seeds)]
     done = db.done_units(STAGE)
 
@@ -450,6 +454,10 @@ def run_scale(db: Database, cfg, run_id: str, mp: dict[str, Any]) -> dict[str, A
         i, s = c; pt = points[i]
         m = {k: v for k, v in mp.items() if k != "scale"}
         m["d_model"] = int(pt["d_model"]); m["steps"] = steps
+        # round-robin each cell onto a fixed GPU (deterministic per cell; data/init drawn on CPU
+        # so results are byte-identical regardless of which identical T4 runs the cell).
+        if ngpus > 1 and str(m.get("device", "auto")) in ("auto", "cuda"):
+            m["device"] = f"cuda:{(i * n_seeds + s) % ngpus}"
         return (arch, int(pt["N"]), int(pt["K"]), s, m)
     def record(c, out):
         i, s = c
