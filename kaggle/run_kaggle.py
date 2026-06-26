@@ -73,33 +73,45 @@ def determinism_selfcheck() -> None:
 
 
 def summarize() -> None:
-    ds = ROOT / "data" / "runs" / "mp0b" / "data_switch"
-    if not ds.exists():
-        print("[kaggle] no data_switch outputs found.")
+    base = ROOT / "data" / "runs" / "mp0b"
+    scale = base / "scale"
+    if scale.exists() and any(scale.glob("p*_s*.json")):
+        print("\n=== MP0b-22 SCALE (N>=32) RESULT SUMMARY ===")
+        pts = {}
+        for p in scale.glob("p*_s*.json"):
+            d = json.loads(p.read_text())
+            pts.setdefault(int(d.get("point", 0)), []).append(d)
+        for i in sorted(pts):
+            recs = pts[i]
+            N, K = recs[0].get("N"), recs[0].get("K")
+            fk = sorted(r["final_k"] for r in recs)
+            jumps = sorted(r.get("jump") for r in recs if r.get("jump"))
+            hi = max(fk) if fk else 1
+            stuck = sum(1 for x in fk if x < 0.5 * hi)
+            gaps = [fk[j + 1] - fk[j] for j in range(len(fk) - 1)]
+            print(f"  N={N} K={K}: finals={[round(x, 1) for x in fk]}")
+            print(f"          n={len(fk)}  stuck(<0.5*max)={stuck}/{len(fk)}  "
+                  f"max_gap={round(max(gaps), 1) if gaps else 0}  "
+                  f"jumped={len(jumps)}/{len(fk)}  jump_range={(jumps[0], jumps[-1]) if jumps else None}")
+        print("  (a split at a given N => the bimodal critical-period trap PERSISTS at that N;")
+        print("   all-stuck @budget => transition likely exceeds budget, consistent with steep scaling.)")
         return
-    recs = {}
-    for p in ds.glob("*.json"):
-        d = json.loads(p.read_text())
-        recs[d["tag"]] = d
-    def fk(t):
-        return round(recs[t]["final_k"], 1) if t in recs else None
-    Ts = [10000, 20000, 30000, 50000, 75000]
-    print("\n=== MP0b-16 (P100) RESULT SUMMARY ===")
-    print(f"  P100 controls:  ctrl_rescue(i3,d2) = {fk('ctrl_rescue')}   ctrl_stuck(i3,d0) = {fk('ctrl_stuck')}")
-    print(f"  rm  (start d2 rescue, ->d0 at T): " +
-          "  ".join(f"T{T//1000}k={fk(f'rm_T{T}')}" for T in Ts))
-    print(f"  add (start d0 stuck,  ->d2 at T): " +
-          "  ".join(f"T{T//1000}k={fk(f'add_T{T}')}" for T in Ts))
-    print("  (rm crossover = rescue LOCK-IN step; add crossover = window-CLOSE step.)")
-    print(f"  cells present: {len(recs)}/12")
+    ds = base / "data_switch"
+    if not ds.exists():
+        print("[kaggle] no scale or data_switch outputs found to summarize.")
+        return
+    recs = {json.loads(p.read_text())["tag"]: json.loads(p.read_text()) for p in ds.glob("*.json")}
+    print(f"\n=== data_switch summary ({len(recs)} cells) ===")
+    for tag in sorted(recs):
+        print(f"  {tag}: final_k={round(recs[tag]['final_k'], 1)}")
 
 
 def zip_outputs() -> None:
-    ds = ROOT / "data" / "runs" / "mp0b" / "data_switch"
-    if not ds.exists():
+    base = ROOT / "data" / "runs" / "mp0b"
+    if not base.exists():
         return
     dest_dir = Path("/kaggle/working") if Path("/kaggle/working").exists() else ROOT
-    archive = shutil.make_archive(str(dest_dir / "mp0b16_p100_results"), "zip", str(ds))
+    archive = shutil.make_archive(str(dest_dir / "mp0b_results"), "zip", str(base))
     print(f"[kaggle] zipped outputs -> {archive}  (download this for the laptop record)")
 
 

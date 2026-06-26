@@ -102,7 +102,7 @@ mp0b:
   lr: 0.0005
   amp: false
   grad_clip: 1.0
-  warmup_steps: 600
+  warmup_steps: 600                # canonical (MP0b-22 studies the NATURAL phenomenon at N>=32)
   log_every: 50                    # MP0b-14 morphology: dense (~3000 pts/150k) to resolve the SHAPE
   early_stop_acc: 1.01             # never early-stop: we want the full trajectory
   device: auto
@@ -128,11 +128,19 @@ mp0b:
   # stuck under d0/d1/d3 but RESCUED by d2, with the basin selected MID-TRAINING (~20-50k). Switch
   # i3's training stream between rescuing (d2) and non-rescuing (d0) at step T to locate the causal
   # window: rm (d2->d0) crossover = rescue lock-in step; add (d0->d2) crossover = window-close step.
-  data_switch:
-    init_seed: 3
-    rescue_seed: 2
-    stuck_seed: 0
-    switch_steps: [10000, 20000, 30000, 50000, 75000]
+  # MP0b-22 (CLOUD/Kaggle T4, N>=32): does the bimodal critical-period trap PERSIST past the 4GB-laptop
+  # ceiling (N<=16)? Scale sweep N in {16 (on-platform anchor), 32}, K=2N, 8 seeds, 400k steps, canonical
+  # warmup=600. N=16@400k = same-budget reference (expect ~bimodal, more late-jumpers than @150k). If
+  # N=32 also splits => phenomenon is NOT a small-N artifact; if all-stuck @400k => transition exceeds
+  # budget (consistent with steep jump-time-vs-N scaling, MP0b-13). Add {N:64,K:128} later as a stretch.
+  scale:
+    points:
+      - {N: 16, d_model: 64, K: 32}
+      - {N: 32, d_model: 64, K: 64}
+    n_seeds: 6
+    steps: 400000
+  # MP0b-16..20 (done): data_switch / sweep / init_seed / data_seed retired (data archived under
+  # data_switch_mp0b1[6-9]_*/ and warmup_steps_*/).
   # MP0b-15 (DONE): grid2d retired (data in data/runs/mp0b/grid2d/). dispatch checks data_switch
   # first, but keep this commented for clarity. init x data 4x4 -> init 0.567/data 0.077/inter 0.356.
   # grid2d:

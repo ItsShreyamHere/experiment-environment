@@ -10,5 +10,6 @@ data/
 logs/
 *.log
 mp0b16_p100_results.zip
+mp0b_results.zip
 
 .DS_Store
