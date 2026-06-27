@@ -583,3 +583,30 @@ shown robust to (while modulable by) both data and schedule.
 recurrences/attention? Does it persist / its window scale at N>=32? Is there a schedule that *does*
 collapse the bimodality (cosine, lower peak LR, longer total budget)? These extend the discovery; they
 do not threaten its core, which is established on this 4 GB laptop.
+
+## MP0b-22 — N>=32 (Kaggle T4 x2): the trap PERSISTS at N=32, and the escapees reveal K* proportional to N
+
+First experiment past the 4 GB-laptop ceiling: scale sweep N in {16 (on-platform anchor), 32}, K=2N,
+d_model=64, 6 seeds, 400k steps, canonical warmup=600, on Kaggle dual-T4 (cells round-robin'd across
+both GPUs; P/T4-internal determinism self-check PASSED). Data: mp0b_results.zip (T4 platform).
+```
+N=16 K=32 (400k):  finals [7.5, 10.5, 12.0, 12.9, 23.1, 24.1]   BIMODAL gap_frac 0.61 stuck 3/6  jumps 88.6k,144k
+N=32 K=64 (400k):  finals [8.2, 16.4, 18.3, 18.4, 35.1, 48.5]   BIMODAL gap_frac 0.41 stuck 4/6  jump 108k (1 crossed 0.6)
+```
+**(1) The bimodal critical-period trap PERSISTS at N=32** - a clear stuck cluster (acc ~0.13-0.29) vs
+escapees reaching the high basin (35.1=acc0.55, 48.5=acc0.76). **NOT a small-N (N<=16) artifact.**
+Consistent with steep jump-time-vs-N scaling: at N=32 only 1-2 cells fully escaped within 400k (vs the
+transition already taking >100k at N=16), so most look pre-/partially-transitioned at this budget.
+
+**(2) Bonus - the escapees reveal the hidden L1 measurement.** The trap-escaping WINNERS scale cleanly:
+K* ~ 24 at N=16, ~48.5 at N=32 -> ratio 2.0 for 2x N -> **K* proportional to N (exponent ~1.01, LINEAR)**,
+exactly L1's prediction `K* = N b / log V` with ~constant `b`. So **conditioned on trap-escapees, K*(N) is
+linear and `b` is roughly scale-stable** - the clean measurement the trap normally hides. This closes the
+arc back to CDE's origin: `b` was irreproducible *because most cells fall into the early-training trap*;
+the escapees show L1 holding (linear, NOT super-linear => L1 survives this small test).
+
+**Caveats (honest):** 6 seeds, only 1-2 clear escapees per N; the N=32 winner s3 (35.1, acc 0.55) is
+UNDER-CONVERGED at 400k, so K*(32) >= 48.5 is a lower bound; T4 platform (internally deterministic, not
+byte-comparable to laptop). Exponent ~1.0 is suggestive, not a CI-bounded measurement. **Next to harden
+it:** more seeds + longer budget at N=32 (and N=48/64) to (a) get more converged escapees, (b) fit K*(N)
+with a CI and read `b` + its curvature - i.e. run the actual MP0 b-measurement *on the escapee subpopulation*.
