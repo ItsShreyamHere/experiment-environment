@@ -144,6 +144,12 @@ def train_cell(arch: str, state_dim: int, num_pairs: int, seed: int, mp: dict[st
         torch.use_deterministic_algorithms(True, warn_only=True)
     except Exception:
         pass
+    try:                               # force the deterministic (math) SDPA backend: flash / mem-efficient
+        torch.backends.cuda.enable_flash_sdp(False)          # attention have NON-deterministic backward,
+        torch.backends.cuda.enable_mem_efficient_sdp(False)  # which would break A3 for the attention arch.
+        torch.backends.cuda.enable_math_sdp(True)            # (no-op for diag_ssm; cheap at seq<=128).
+    except Exception:
+        pass
     gen = torch.Generator().manual_seed(data_seed + 1)
     eval_gen = torch.Generator().manual_seed(data_seed + 9973)
     # MP0b-16 critical-window probe (opt-in): switch the TRAINING data stream to a new
